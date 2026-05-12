@@ -1,4 +1,5 @@
-# AI Recruitment Intelligence Platform
+# Multi-Agent-AI-Recruitment-Intelligence-Platform
+
 
 An AI-powered recruitment and ATS intelligence platform built using semantic embeddings, vector databases, Retrieval-Augmented Generation (RAG), and local Large Language Models (LLMs).
 
