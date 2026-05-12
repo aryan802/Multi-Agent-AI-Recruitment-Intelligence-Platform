@@ -33,6 +33,7 @@ collection = chroma_client.get_or_create_collection(
     name="resume_jobs"
 )
 
+
 # -----------------------------
 # EMBEDDING MODEL
 # -----------------------------
