@@ -16,7 +16,12 @@ from database import (
     search_resumes
 )
 
-from rag import generate_rag_response
+from agents import (
+    ats_agent,
+    recruiter_agent,
+    interview_agent,
+    career_coach_agent
+)
 
 # -----------------------------
 # CONFIG
@@ -199,22 +204,73 @@ if uploaded_file and job_description and candidate_name:
             st.error(skill)
 
     # -----------------------------
-    # RAG ANALYSIS
+    # MULTI AGENT AI ANALYSIS
     # -----------------------------
+    from agents import get_context
+
+    resume_context, jd_context = get_context(
+        query
+    )
+
+    query = cleaned_resume + "\n" + cleaned_jd
 
     st.subheader(
-        "RAG Based AI Analysis"
+        "ATS Agent"
     )
 
     with st.spinner(
-        "Generating grounded AI response..."
+        "Running ATS analysis..."
     ):
 
-        feedback = generate_rag_response(
-            cleaned_resume + "\n" + cleaned_jd
+        ats_feedback = ats_agent(
+            resume_context,
+            jd_context
         )
 
-    st.write(feedback)
+    st.write(ats_feedback)
+
+    # -----------------------------
+
+    st.subheader(
+        "Recruiter Agent"
+    )
+
+    with st.spinner(
+        "Running recruiter evaluation..."
+    ):
+
+        recruiter_feedback = recruiter_agent(query)
+
+    st.write(recruiter_feedback)
+
+    # -----------------------------
+
+    st.subheader(
+        "Interview Agent"
+    )
+
+    with st.spinner(
+        "Generating interview preparation..."
+    ):
+
+        interview_feedback = interview_agent(query)
+
+    st.write(interview_feedback)
+
+    # -----------------------------
+
+    st.subheader(
+        "Career Coach Agent"
+    )
+
+    with st.spinner(
+        "Generating career roadmap..."
+    ):
+
+        coach_feedback = career_coach_agent(query)
+
+    st.write(coach_feedback)
+
 
     # -----------------------------
     # RETRIEVAL DEBUG
