@@ -2,3 +2,4 @@ venv/
 __pycache__/
 *.pyc
 test_custom_jd.txt
+dump_info.txt

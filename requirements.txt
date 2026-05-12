@@ -3,3 +3,4 @@ scikit-learn
 pdfplumber 
 pandas
 nltk
+google-generativeai
