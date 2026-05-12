@@ -2,47 +2,30 @@ import streamlit as st
 import pdfplumber
 import re
 import nltk
-import google.generativeai as genai
-from dotenv import load_dotenv
 import os
+import uuid
+import chromadb
+import ollama
+
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
-import chromadb
-import uuid
 
 # -----------------------------
 # CONFIG
 # -----------------------------
 
 st.set_page_config(
-    page_title="AI Resume Analyzer",
+    page_title="AI Recruitment Intelligence Platform",
     layout="wide"
 )
 
 nltk.download('punkt', quiet=True)
 
-load_dotenv()
-
-API_KEY = os.getenv("GEMINI_API_KEY")
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # -----------------------------
-# GEMINI SETUP
+# VECTOR DATABASE
 # -----------------------------
-
-model = None
-
-if API_KEY:
-
-    try:
-
-        genai.configure(api_key=API_KEY)
-
-        model = genai.GenerativeModel(
-            "gemini-2.0-flash"
-        )
-
-    except Exception:
-        model = None
 
 chroma_client = chromadb.Client()
 
@@ -55,7 +38,9 @@ collection = chroma_client.get_or_create_collection(
     name="resume_jobs"
 )
 
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
+# -----------------------------
+# EMBEDDING MODEL
+# -----------------------------
 
 embedding_model = SentenceTransformer(
     'all-MiniLM-L6-v2'
@@ -65,13 +50,16 @@ embedding_model = SentenceTransformer(
 # SIDEBAR
 # -----------------------------
 
-st.sidebar.title("AI Resume Analyzer")
+st.sidebar.title("AI Recruitment Intelligence Platform")
 
 st.sidebar.info(
     """
-    Upload your resume and compare it
-    against job descriptions using
-    ATS-style NLP analysis.
+    Semantic ATS analysis using:
+    
+    • Transformer embeddings\n
+    • ChromaDB vector retrieval\n
+    • Chunked RAG pipelines\n
+    • Local LLM orchestration\n
     """
 )
 
@@ -79,7 +67,7 @@ st.sidebar.info(
 # MAIN TITLE
 # -----------------------------
 
-st.title("AI Resume Analyzer and ATS Checker")
+st.title("AI Recruitment Intelligence Platform")
 
 uploaded_file = st.file_uploader(
     "Upload Resume PDF",
@@ -121,7 +109,12 @@ COMMON_SKILLS = [
     "flask",
     "django",
     "aws",
-    "docker"
+    "docker",
+    "langchain",
+    "rag",
+    "llm",
+    "vector database",
+    "fastapi"
 ]
 
 # -----------------------------
@@ -156,6 +149,7 @@ def clean_text(text):
 
     return text
 
+
 def chunk_text(text, chunk_size=500):
 
     chunks = []
@@ -167,6 +161,19 @@ def chunk_text(text, chunk_size=500):
         chunks.append(chunk)
 
     return chunks
+
+
+def extract_skills(text):
+
+    found_skills = []
+
+    for skill in COMMON_SKILLS:
+
+        if skill in text:
+            found_skills.append(skill)
+
+    return found_skills
+
 
 def store_documents(resume, jd):
 
@@ -213,6 +220,7 @@ def store_documents(resume, jd):
         ids=ids
     )
 
+
 def retrieve_similar_documents(query):
 
     query_embedding = embedding_model.encode(
@@ -225,17 +233,6 @@ def retrieve_similar_documents(query):
     )
 
     return results
-
-def extract_skills(text):
-
-    found_skills = []
-
-    for skill in COMMON_SKILLS:
-
-        if skill in text:
-            found_skills.append(skill)
-
-    return found_skills
 
 
 def calculate_similarity(resume, jd):
@@ -278,49 +275,58 @@ def calculate_similarity(resume, jd):
     return round(final_score, 2)
 
 
-def get_ai_suggestions(resume, jd):
+def generate_rag_response(query):
 
-    if model is None:
+    retrieval_results = retrieve_similar_documents(
+        query
+    )
 
-        return """
-AI feedback unavailable.
+    retrieved_docs = retrieval_results["documents"][0]
 
-Possible reasons:
-- Invalid API key
-- Gemini quota exceeded
-- API not configured
-"""
+    context = "\n\n".join(retrieved_docs)
 
     prompt = f"""
-You are an ATS and resume expert.
+You are an expert ATS evaluator and AI recruiter.
 
-Analyze this resume against the job description.
+Use ONLY the retrieved context below
+to answer the question.
+
+Retrieved Context:
+{context}
+
+Question:
+{query}
 
 Give:
-1. Missing important skills
-2. Resume improvement suggestions
-3. ATS optimization tips
-4. 3 likely interview questions
-
-Resume:
-{resume}
-
-Job Description:
-{jd}
+1. Resume weaknesses
+2. Missing skills
+3. ATS optimization suggestions
+4. Interview preparation advice
 """
 
     try:
 
-        response = model.generate_content(
-            prompt
+        response = ollama.chat(
+            model='gemma:2b',
+            messages=[
+                {
+                    'role': 'user',
+                    'content': prompt
+                }
+            ]
         )
 
-        return response.text
+        return response['message']['content']
 
     except Exception as e:
 
         return f"""
-AI feedback temporarily unavailable.
+Local LLM unavailable.
+
+Possible reasons:
+- Ollama not installed
+- gemma:2b model not downloaded
+- Ollama server not running
 
 Error:
 {str(e)}
@@ -464,17 +470,17 @@ font-weight:bold;
 
                 st.markdown(
                     f"""
-                        <div style="
-                        padding:10px;
-                        border-radius:10px;
-                        background-color:#7a1c1c;
-                        margin-bottom:10px;
-                        color:white;
-                        font-weight:bold;
-                        ">
-                        ❌ {skill}
-                        </div>
-                    """,
+<div style="
+padding:10px;
+border-radius:10px;
+background-color:#7a1c1c;
+margin-bottom:10px;
+color:white;
+font-weight:bold;
+">
+❌ {skill}
+</div>
+""",
                     unsafe_allow_html=True
                 )
 
@@ -497,25 +503,35 @@ font-weight:bold;
     )
 
     # -----------------------------
-    # AI FEEDBACK
+    # RAG RESPONSE
     # -----------------------------
 
     st.subheader(
-        "AI Resume Feedback"
+        "RAG Based AI Analysis"
     )
 
     with st.spinner(
-        "Generating AI Suggestions..."
+        "Generating grounded AI response..."
     ):
 
-        feedback = get_ai_suggestions(
-            resume_text,
-            job_description
+        feedback = generate_rag_response(
+            "Analyze this resume against the job description"
         )
 
     st.write(feedback)
 
-    st.subheader("Semantic Retrieval Results")
+    # -----------------------------
+    # RETRIEVAL RESULTS
+    # -----------------------------
+show_chunks = st.sidebar.checkbox(
+    "Show Retrieval Chunks"
+)
+
+if show_chunks:
+
+    st.subheader(
+        "Semantic Retrieval Results"
+    )
 
     retrieval_results = retrieve_similar_documents(
         cleaned_resume
@@ -529,12 +545,12 @@ font-weight:bold;
 
         st.markdown(
             f"""
-        ### Retrieved Chunk {idx+1}
+### Retrieved Chunk {idx+1}
 
-        Type: {metadata['type']}
+Type: {metadata['type']}
 
-        Chunk Index: {metadata['chunk']}
-        """
+Chunk Index: {metadata['chunk']}
+"""
         )
 
         st.info(doc[:500])

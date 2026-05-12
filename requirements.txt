@@ -3,8 +3,8 @@ scikit-learn
 pdfplumber 
 pandas
 nltk
-google-generativeai
 torch==2.2.2
 sentence-transformers==2.7.0
 numpy==1.26.4
 chromadb
+ollama
