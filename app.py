@@ -206,13 +206,16 @@ if uploaded_file and job_description and candidate_name:
     # -----------------------------
     # MULTI AGENT AI ANALYSIS
     # -----------------------------
+
     from agents import get_context
+
+    query = cleaned_resume + "\n" + cleaned_jd
 
     resume_context, jd_context = get_context(
         query
     )
 
-    query = cleaned_resume + "\n" + cleaned_jd
+    # -----------------------------
 
     st.subheader(
         "ATS Agent"
@@ -239,7 +242,10 @@ if uploaded_file and job_description and candidate_name:
         "Running recruiter evaluation..."
     ):
 
-        recruiter_feedback = recruiter_agent(query)
+        recruiter_feedback = recruiter_agent(
+            resume_context,
+            jd_context
+        )
 
     st.write(recruiter_feedback)
 
@@ -253,7 +259,10 @@ if uploaded_file and job_description and candidate_name:
         "Generating interview preparation..."
     ):
 
-        interview_feedback = interview_agent(query)
+        interview_feedback = interview_agent(
+            resume_context,
+            jd_context
+        )
 
     st.write(interview_feedback)
 
@@ -267,10 +276,12 @@ if uploaded_file and job_description and candidate_name:
         "Generating career roadmap..."
     ):
 
-        coach_feedback = career_coach_agent(query)
+        coach_feedback = career_coach_agent(
+            resume_context,
+            jd_context
+        )
 
     st.write(coach_feedback)
-
 
     # -----------------------------
     # RETRIEVAL DEBUG

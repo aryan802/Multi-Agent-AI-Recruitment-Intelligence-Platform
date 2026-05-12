@@ -77,7 +77,10 @@ Analyze:
 - ATS optimization
 - resume weaknesses
 
-Give concise feedback.
+Do NOT say:
+'context not provided'
+
+Give concise practical feedback.
 """
 
     return run_agent(
@@ -87,7 +90,10 @@ Give concise feedback.
     )
 
 
-def recruiter_agent(query):
+def recruiter_agent(
+    resume_context,
+    jd_context
+):
 
     prompt = """
 Act as a technical recruiter.
@@ -97,6 +103,9 @@ Analyze:
 - candidate strengths
 - candidate weaknesses
 - recruiter confidence
+
+Do NOT say:
+'context not provided'
 
 Give concise professional evaluation.
 """
@@ -108,7 +117,10 @@ Give concise professional evaluation.
     )
 
 
-def interview_agent(query):
+def interview_agent(
+    resume_context,
+    jd_context
+):
 
     prompt = """
 Act as a technical interviewer.
@@ -128,7 +140,10 @@ Focus on practical preparation.
     )
 
 
-def career_coach_agent(query):
+def career_coach_agent(
+    resume_context,
+    jd_context
+):
 
     prompt = """
 Act as an AI career coach.
