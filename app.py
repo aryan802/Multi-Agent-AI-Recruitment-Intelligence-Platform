@@ -150,15 +150,25 @@ def clean_text(text):
     return text
 
 
-def chunk_text(text, chunk_size=500):
+def chunk_text(
+    text,
+    chunk_size=400,
+    overlap=100
+):
 
     chunks = []
 
-    for i in range(0, len(text), chunk_size):
+    start = 0
 
-        chunk = text[i:i + chunk_size]
+    while start < len(text):
+
+        end = start + chunk_size
+
+        chunk = text[start:end]
 
         chunks.append(chunk)
+
+        start += chunk_size - overlap
 
     return chunks
 
@@ -229,7 +239,7 @@ def retrieve_similar_documents(query):
 
     results = collection.query(
         query_embeddings=query_embedding,
-        n_results=5
+        n_results=3
     )
 
     return results
@@ -297,11 +307,16 @@ Retrieved Context:
 Question:
 {query}
 
-Give:
-1. Resume weaknesses
-2. Missing skills
-3. ATS optimization suggestions
-4. Interview preparation advice
+Evaluate the candidate professionally.
+
+Provide:
+1. ATS compatibility assessment
+2. Important missing technical skills
+3. Resume improvement recommendations
+4. Project recommendations for this role
+5. Likely interview focus areas
+
+Base your response ONLY on retrieved context.
 """
 
     try:
@@ -510,6 +525,10 @@ font-weight:bold;
         "RAG Based AI Analysis"
     )
 
+    st.caption(
+    "Powered by transformer embeddings, ChromaDB vector retrieval, and local LLM orchestration."
+)
+
     with st.spinner(
         "Generating grounded AI response..."
     ):
@@ -523,34 +542,34 @@ font-weight:bold;
     # -----------------------------
     # RETRIEVAL RESULTS
     # -----------------------------
-show_chunks = st.sidebar.checkbox(
-    "Show Retrieval Chunks"
-)
-
-if show_chunks:
-
-    st.subheader(
-        "Semantic Retrieval Results"
+    show_chunks = st.sidebar.checkbox(
+        "Show Retrieval Chunks"
     )
 
-    retrieval_results = retrieve_similar_documents(
-        cleaned_resume
-    )
+    if show_chunks:
 
-    retrieved_docs = retrieval_results["documents"][0]
-
-    for idx, doc in enumerate(retrieved_docs):
-
-        metadata = retrieval_results["metadatas"][0][idx]
-
-        st.markdown(
-            f"""
-### Retrieved Chunk {idx+1}
-
-Type: {metadata['type']}
-
-Chunk Index: {metadata['chunk']}
-"""
+        st.subheader(
+            "Semantic Retrieval Results"
         )
 
-        st.info(doc[:500])
+        retrieval_results = retrieve_similar_documents(
+            cleaned_resume
+        )
+
+        retrieved_docs = retrieval_results["documents"][0]
+
+        for idx, doc in enumerate(retrieved_docs):
+
+            metadata = retrieval_results["metadatas"][0][idx]
+
+            st.markdown(
+                f"""
+    ### Retrieved Chunk {idx+1}
+
+    Type: {metadata['type']}
+
+    Chunk Index: {metadata['chunk']}
+    """
+            )
+
+            st.info(doc[:500])
