@@ -8,6 +8,7 @@ import os
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import chromadb
+import uuid
 
 # -----------------------------
 # CONFIG
@@ -44,6 +45,11 @@ if API_KEY:
         model = None
 
 chroma_client = chromadb.Client()
+
+try:
+    chroma_client.delete_collection("resume_jobs")
+except:
+    pass
 
 collection = chroma_client.get_or_create_collection(
     name="resume_jobs"
@@ -150,25 +156,60 @@ def clean_text(text):
 
     return text
 
+def chunk_text(text, chunk_size=500):
+
+    chunks = []
+
+    for i in range(0, len(text), chunk_size):
+
+        chunk = text[i:i + chunk_size]
+
+        chunks.append(chunk)
+
+    return chunks
+
 def store_documents(resume, jd):
 
-    documents = [
-        resume,
-        jd
-    ]
+    resume_chunks = chunk_text(resume)
 
-    ids = [
-        "resume",
-        "job_description"
-    ]
+    jd_chunks = chunk_text(jd)
+
+    all_chunks = []
+
+    metadatas = []
+
+    ids = []
+
+    for idx, chunk in enumerate(resume_chunks):
+
+        all_chunks.append(chunk)
+
+        metadatas.append({
+            "type": "resume",
+            "chunk": idx
+        })
+
+        ids.append(str(uuid.uuid4()))
+
+    for idx, chunk in enumerate(jd_chunks):
+
+        all_chunks.append(chunk)
+
+        metadatas.append({
+            "type": "job_description",
+            "chunk": idx
+        })
+
+        ids.append(str(uuid.uuid4()))
 
     embeddings = embedding_model.encode(
-        documents
+        all_chunks
     ).tolist()
 
     collection.upsert(
-        documents=documents,
+        documents=all_chunks,
         embeddings=embeddings,
+        metadatas=metadatas,
         ids=ids
     )
 
@@ -180,7 +221,7 @@ def retrieve_similar_documents(query):
 
     results = collection.query(
         query_embeddings=query_embedding,
-        n_results=2
+        n_results=5
     )
 
     return results
@@ -484,6 +525,16 @@ font-weight:bold;
 
     for idx, doc in enumerate(retrieved_docs):
 
-        st.markdown(f"### Retrieved Document {idx+1}")
+        metadata = retrieval_results["metadatas"][0][idx]
 
-        st.write(doc[:500])
+        st.markdown(
+            f"""
+        ### Retrieved Chunk {idx+1}
+
+        Type: {metadata['type']}
+
+        Chunk Index: {metadata['chunk']}
+        """
+        )
+
+        st.info(doc[:500])
