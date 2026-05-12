@@ -5,8 +5,7 @@ import nltk
 import google.generativeai as genai
 from dotenv import load_dotenv
 import os
-
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
 # -----------------------------
@@ -42,6 +41,10 @@ if API_KEY:
 
     except Exception:
         model = None
+
+embedding_model = SentenceTransformer(
+    'all-MiniLM-L6-v2'
+)
 
 # -----------------------------
 # SIDEBAR
@@ -153,21 +156,20 @@ def extract_skills(text):
 
 def calculate_similarity(resume, jd):
 
-    vectorizer = TfidfVectorizer(
-        stop_words='english',
-        ngram_range=(1, 2)
+    resume_embedding = embedding_model.encode(
+        [resume]
     )
 
-    vectors = vectorizer.fit_transform(
-        [resume, jd]
+    jd_embedding = embedding_model.encode(
+        [jd]
     )
 
-    similarity = cosine_similarity(
-        vectors[0:1],
-        vectors[1:2]
-    )
+    semantic_similarity = cosine_similarity(
+        resume_embedding,
+        jd_embedding
+    )[0][0]
 
-    base_score = similarity[0][0] * 100
+    semantic_score = semantic_similarity * 100
 
     resume_skills = extract_skills(resume)
 
@@ -184,9 +186,9 @@ def calculate_similarity(resume, jd):
     skill_score = (matched / total) * 100
 
     final_score = (
-        0.6 * base_score
+        0.7 * semantic_score
     ) + (
-        0.4 * skill_score
+        0.3 * skill_score
     )
 
     return round(final_score, 2)
@@ -296,6 +298,10 @@ if uploaded_file and job_description:
         st.error(
             "Low Match"
         )
+
+    st.caption(
+        "Score generated using semantic embeddings and skill matching."
+    )
 
     # -----------------------------
     # SKILL ANALYSIS
