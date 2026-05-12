@@ -2,7 +2,6 @@ import streamlit as st
 import pdfplumber
 import re
 import nltk
-import matplotlib.pyplot as plt
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -73,7 +72,10 @@ def clean_text(text):
 
 def calculate_similarity(resume, jd):
 
-    vectorizer = TfidfVectorizer()
+    vectorizer = TfidfVectorizer(
+        stop_words='english',
+        ngram_range=(1,2)
+    )
 
     vectors = vectorizer.fit_transform([resume, jd])
 
@@ -82,7 +84,22 @@ def calculate_similarity(resume, jd):
         vectors[1:2]
     )
 
-    return round(similarity[0][0] * 100, 2)
+    base_score = similarity[0][0] * 100
+
+    resume_skills = extract_skills(resume)
+    jd_skills = extract_skills(jd)
+
+    matched = len(
+        set(resume_skills).intersection(set(jd_skills))
+    )
+
+    total = max(len(jd_skills), 1)
+
+    skill_score = (matched / total) * 100
+
+    final_score = (0.6 * base_score) + (0.4 * skill_score)
+
+    return round(final_score, 2)
 
 def extract_skills(text):
 
@@ -158,20 +175,6 @@ if uploaded_file and job_description:
         else:
             st.write("No major skills missing")
 
-    st.subheader("Skills Match Visualization")
-
-    labels = ["Matched Skills", "Missing Skills"]
-
-    values = [
-        len(matched_skills),
-        len(missing_skills)
-    ]
-
-    fig, ax = plt.subplots()
-
-    ax.bar(labels, values)
-
-    st.pyplot(fig)
 
     st.subheader("Resume Preview")
 
