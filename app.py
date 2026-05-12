@@ -244,7 +244,8 @@ if uploaded_file and job_description and candidate_name:
 
         recruiter_feedback = recruiter_agent(
             resume_context,
-            jd_context
+            jd_context,
+            ats_feedback
         )
 
     st.write(recruiter_feedback)
@@ -261,7 +262,8 @@ if uploaded_file and job_description and candidate_name:
 
         interview_feedback = interview_agent(
             resume_context,
-            jd_context
+            jd_context,
+            ats_feedback + "\n" + recruiter_feedback
         )
 
     st.write(interview_feedback)
@@ -278,7 +280,8 @@ if uploaded_file and job_description and candidate_name:
 
         coach_feedback = career_coach_agent(
             resume_context,
-            jd_context
+            jd_context,
+            ats_feedback + "\n" + recruiter_feedback + "\n" + interview_feedback
         )
 
     st.write(coach_feedback)

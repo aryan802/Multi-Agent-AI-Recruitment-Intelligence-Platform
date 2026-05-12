@@ -30,7 +30,8 @@ def get_context(query):
 def run_agent(
     system_prompt,
     resume_context,
-    jd_context
+    jd_context,
+    previous_memory=""
 ):
 
     prompt = f"""
@@ -39,6 +40,9 @@ Resume Context:
 
 Job Description Context:
 {jd_context}
+
+Previous Memory:
+{previous_memory}
 
 Task:
 {system_prompt}
@@ -86,13 +90,15 @@ Give concise practical feedback.
     return run_agent(
         prompt,
         resume_context,
-        jd_context
+        jd_context,
+        previous_memory
     )
 
 
 def recruiter_agent(
     resume_context,
-    jd_context
+    jd_context,
+    previous_memory=""
 ):
 
     prompt = """
@@ -113,7 +119,8 @@ Give concise professional evaluation.
     return run_agent(
         prompt,
         resume_context,
-        jd_context
+        jd_context,
+        previous_memory
     )
 
 
@@ -136,7 +143,8 @@ Focus on practical preparation.
     return run_agent(
         prompt,
         resume_context,
-        jd_context
+        jd_context,
+        previous_memory
     )
 
 
@@ -156,9 +164,9 @@ Suggest:
 
 Focus on career growth.
 """
-
     return run_agent(
         prompt,
         resume_context,
-        jd_context
+        jd_context,
+        previous_memory
     )
