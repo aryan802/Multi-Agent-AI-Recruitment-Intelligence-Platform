@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 import os
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
+import chromadb
 
 # -----------------------------
 # CONFIG
@@ -17,7 +18,7 @@ st.set_page_config(
     layout="wide"
 )
 
-nltk.download('punkt')
+nltk.download('punkt', quiet=True)
 
 load_dotenv()
 
@@ -41,6 +42,14 @@ if API_KEY:
 
     except Exception:
         model = None
+
+chroma_client = chromadb.Client()
+
+collection = chroma_client.get_or_create_collection(
+    name="resume_jobs"
+)
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 embedding_model = SentenceTransformer(
     'all-MiniLM-L6-v2'
@@ -141,6 +150,40 @@ def clean_text(text):
 
     return text
 
+def store_documents(resume, jd):
+
+    documents = [
+        resume,
+        jd
+    ]
+
+    ids = [
+        "resume",
+        "job_description"
+    ]
+
+    embeddings = embedding_model.encode(
+        documents
+    ).tolist()
+
+    collection.upsert(
+        documents=documents,
+        embeddings=embeddings,
+        ids=ids
+    )
+
+def retrieve_similar_documents(query):
+
+    query_embedding = embedding_model.encode(
+        [query]
+    ).tolist()
+
+    results = collection.query(
+        query_embeddings=query_embedding,
+        n_results=2
+    )
+
+    return results
 
 def extract_skills(text):
 
@@ -261,6 +304,11 @@ if uploaded_file and job_description:
         job_description
     )
 
+    store_documents(
+        cleaned_resume,
+        cleaned_jd
+    )
+
     score = calculate_similarity(
         cleaned_resume,
         cleaned_jd
@@ -375,17 +423,17 @@ font-weight:bold;
 
                 st.markdown(
                     f"""
-<div style="
-padding:10px;
-border-radius:10px;
-background-color:#7a1c1c;
-margin-bottom:10px;
-color:white;
-font-weight:bold;
-">
-❌ {skill}
-</div>
-""",
+                        <div style="
+                        padding:10px;
+                        border-radius:10px;
+                        background-color:#7a1c1c;
+                        margin-bottom:10px;
+                        color:white;
+                        font-weight:bold;
+                        ">
+                        ❌ {skill}
+                        </div>
+                    """,
                     unsafe_allow_html=True
                 )
 
@@ -425,3 +473,17 @@ font-weight:bold;
         )
 
     st.write(feedback)
+
+    st.subheader("Semantic Retrieval Results")
+
+    retrieval_results = retrieve_similar_documents(
+        cleaned_resume
+    )
+
+    retrieved_docs = retrieval_results["documents"][0]
+
+    for idx, doc in enumerate(retrieved_docs):
+
+        st.markdown(f"### Retrieved Document {idx+1}")
+
+        st.write(doc[:500])
