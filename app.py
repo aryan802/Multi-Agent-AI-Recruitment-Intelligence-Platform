@@ -1,12 +1,20 @@
 import streamlit as st
 import pdfplumber
+import re
+import nltk
+import matplotlib.pyplot as plt
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-import re
 
-st.set_page_config(page_title="AI Resume Analyzer", layout="wide")
+nltk.download('punkt')
 
-st.title("AI Resume Analyzer & ATS Checker")
+st.set_page_config(
+    page_title="AI Resume Analyzer",
+    layout="wide"
+)
+
+st.title("AI Resume Analyzer and ATS Checker")
 
 uploaded_file = st.file_uploader(
     "Upload Resume PDF",
@@ -18,11 +26,36 @@ job_description = st.text_area(
     height=250
 )
 
+COMMON_SKILLS = [
+    "python",
+    "java",
+    "c++",
+    "sql",
+    "machine learning",
+    "deep learning",
+    "data analysis",
+    "streamlit",
+    "tensorflow",
+    "pandas",
+    "numpy",
+    "nlp",
+    "react",
+    "javascript",
+    "git",
+    "github",
+    "linux",
+    "power bi",
+    "tableau"
+]
+
 def extract_text_from_pdf(pdf_file):
+
     text = ""
 
     with pdfplumber.open(pdf_file) as pdf:
+
         for page in pdf.pages:
+
             extracted = page.extract_text()
 
             if extracted:
@@ -31,8 +64,10 @@ def extract_text_from_pdf(pdf_file):
     return text
 
 def clean_text(text):
+
     text = text.lower()
-    text = re.sub(r'[^a-zA-Z0-9 ]', '', text)
+
+    text = re.sub(r'[^a-zA-Z0-9 ]', ' ', text)
 
     return text
 
@@ -42,29 +77,30 @@ def calculate_similarity(resume, jd):
 
     vectors = vectorizer.fit_transform([resume, jd])
 
-    similarity = cosine_similarity(vectors[0:1], vectors[1:2])
+    similarity = cosine_similarity(
+        vectors[0:1],
+        vectors[1:2]
+    )
 
     return round(similarity[0][0] * 100, 2)
 
-def missing_keywords(resume, jd):
+def extract_skills(text):
 
-    resume_words = set(resume.split())
-    jd_words = set(jd.split())
+    found_skills = []
 
-    missing = jd_words - resume_words
+    for skill in COMMON_SKILLS:
 
-    important = [
-        word for word in missing
-        if len(word) > 4
-    ]
+        if skill in text:
+            found_skills.append(skill)
 
-    return important[:15]
+    return found_skills
 
 if uploaded_file and job_description:
 
     resume_text = extract_text_from_pdf(uploaded_file)
 
     cleaned_resume = clean_text(resume_text)
+
     cleaned_jd = clean_text(job_description)
 
     score = calculate_similarity(
@@ -72,7 +108,14 @@ if uploaded_file and job_description:
         cleaned_jd
     )
 
-    st.subheader(f"ATS Match Score: {score}%")
+    st.subheader("ATS Match Score")
+
+    st.progress(min(int(score), 100))
+
+    st.metric(
+        label="Match Score",
+        value=f"{score}%"
+    )
 
     if score >= 75:
         st.success("Excellent Match")
@@ -81,18 +124,54 @@ if uploaded_file and job_description:
     else:
         st.error("Low Match")
 
-    st.subheader("Missing Keywords")
+    resume_skills = extract_skills(cleaned_resume)
 
-    missing = missing_keywords(
-        cleaned_resume,
-        cleaned_jd
+    jd_skills = extract_skills(cleaned_jd)
+
+    matched_skills = list(
+        set(resume_skills).intersection(set(jd_skills))
     )
 
-    if missing:
-        for word in missing:
-            st.write(f"- {word}")
-    else:
-        st.write("No major keywords missing")
+    missing_skills = list(
+        set(jd_skills) - set(resume_skills)
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        st.subheader("Matched Skills")
+
+        if matched_skills:
+            for skill in matched_skills:
+                st.write(f"✅ {skill}")
+        else:
+            st.write("No matching skills found")
+
+    with col2:
+
+        st.subheader("Missing Skills")
+
+        if missing_skills:
+            for skill in missing_skills:
+                st.write(f"❌ {skill}")
+        else:
+            st.write("No major skills missing")
+
+    st.subheader("Skills Match Visualization")
+
+    labels = ["Matched Skills", "Missing Skills"]
+
+    values = [
+        len(matched_skills),
+        len(missing_skills)
+    ]
+
+    fig, ax = plt.subplots()
+
+    ax.bar(labels, values)
+
+    st.pyplot(fig)
 
     st.subheader("Resume Preview")
 
