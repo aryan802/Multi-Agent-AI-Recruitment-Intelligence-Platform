@@ -1,4 +1,4 @@
-# AI Resume Analyzer & ATS Checker
+# AI Resume Analyzer & ATS Checker  [In - Making]
 
 An AI-powered Resume Analyzer that compares resumes with job descriptions and calculates ATS match scores.
 
