@@ -29,11 +29,6 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 chroma_client = chromadb.Client()
 
-try:
-    chroma_client.delete_collection("resume_jobs")
-except:
-    pass
-
 collection = chroma_client.get_or_create_collection(
     name="resume_jobs"
 )
@@ -54,13 +49,17 @@ st.sidebar.title("AI Recruitment Intelligence Platform")
 
 st.sidebar.info(
     """
-    Semantic ATS analysis using:
-    
-    • Transformer embeddings\n
-    • ChromaDB vector retrieval\n
-    • Chunked RAG pipelines\n
-    • Local LLM orchestration\n
-    """
+Semantic ATS analysis using:
+
+• Transformer embeddings  
+• ChromaDB vector retrieval  
+• Chunked RAG pipelines  
+• Local LLM orchestration
+"""
+)
+
+show_chunks = st.sidebar.checkbox(
+    "Show Retrieval Chunks"
 )
 
 # -----------------------------
@@ -69,9 +68,17 @@ st.sidebar.info(
 
 st.title("AI Recruitment Intelligence Platform")
 
+st.caption(
+    "Powered by transformer embeddings, ChromaDB vector retrieval, and local LLM orchestration."
+)
+
 uploaded_file = st.file_uploader(
     "Upload Resume PDF",
     type=["pdf"]
+)
+
+candidate_name = st.text_input(
+    "Candidate Name"
 )
 
 job_description = st.text_area(
@@ -185,7 +192,18 @@ def extract_skills(text):
     return found_skills
 
 
-def store_documents(resume, jd):
+def store_documents(
+    resume,
+    jd,
+    candidate
+):
+
+    existing = collection.get(
+        where={"candidate": candidate}
+    )
+
+    if existing["ids"]:
+        return
 
     resume_chunks = chunk_text(resume)
 
@@ -203,7 +221,8 @@ def store_documents(resume, jd):
 
         metadatas.append({
             "type": "resume",
-            "chunk": idx
+            "chunk": idx,
+            "candidate": candidate
         })
 
         ids.append(str(uuid.uuid4()))
@@ -214,7 +233,8 @@ def store_documents(resume, jd):
 
         metadatas.append({
             "type": "job_description",
-            "chunk": idx
+            "chunk": idx,
+            "candidate": candidate
         })
 
         ids.append(str(uuid.uuid4()))
@@ -240,6 +260,20 @@ def retrieve_similar_documents(query):
     results = collection.query(
         query_embeddings=query_embedding,
         n_results=3
+    )
+
+    return results
+
+
+def search_candidates(query):
+
+    query_embedding = embedding_model.encode(
+        [query]
+    ).tolist()
+
+    results = collection.query(
+        query_embeddings=query_embedding,
+        n_results=10
     )
 
     return results
@@ -352,7 +386,7 @@ Error:
 # MAIN ANALYSIS
 # -----------------------------
 
-if uploaded_file and job_description:
+if uploaded_file and job_description and candidate_name:
 
     resume_text = extract_text_from_pdf(
         uploaded_file
@@ -368,7 +402,8 @@ if uploaded_file and job_description:
 
     store_documents(
         cleaned_resume,
-        cleaned_jd
+        cleaned_jd,
+        candidate_name
     )
 
     score = calculate_similarity(
@@ -525,16 +560,12 @@ font-weight:bold;
         "RAG Based AI Analysis"
     )
 
-    st.caption(
-    "Powered by transformer embeddings, ChromaDB vector retrieval, and local LLM orchestration."
-)
-
     with st.spinner(
         "Generating grounded AI response..."
     ):
 
         feedback = generate_rag_response(
-            "Analyze this resume against the job description"
+            cleaned_resume + "\n" + cleaned_jd
         )
 
     st.write(feedback)
@@ -542,9 +573,6 @@ font-weight:bold;
     # -----------------------------
     # RETRIEVAL RESULTS
     # -----------------------------
-    show_chunks = st.sidebar.checkbox(
-        "Show Retrieval Chunks"
-    )
 
     if show_chunks:
 
@@ -564,12 +592,51 @@ font-weight:bold;
 
             st.markdown(
                 f"""
-    ### Retrieved Chunk {idx+1}
+### Retrieved Chunk {idx+1}
 
-    Type: {metadata['type']}
+Type: {metadata['type']}
 
-    Chunk Index: {metadata['chunk']}
-    """
+Chunk Index: {metadata['chunk']}
+"""
             )
 
             st.info(doc[:500])
+
+    # -----------------------------
+    # RECRUITER SEARCH
+    # -----------------------------
+
+    st.subheader("Recruiter Semantic Search")
+
+    recruiter_query = st.text_input(
+        "Search Candidates by Skills or Role"
+    )
+
+    if recruiter_query:
+
+        search_results = search_candidates(
+            recruiter_query
+        )
+
+        retrieved_docs = search_results["documents"][0]
+
+        metadatas = search_results["metadatas"][0]
+
+        displayed_candidates = set()
+
+        for idx, doc in enumerate(retrieved_docs):
+
+            candidate = metadatas[idx].get(
+                "candidate",
+                "Unknown"
+            )
+
+            if candidate not in displayed_candidates:
+
+                displayed_candidates.add(candidate)
+
+                st.success(
+                    f"Matched Candidate: {candidate}"
+                )
+
+                st.info(doc[:300])
