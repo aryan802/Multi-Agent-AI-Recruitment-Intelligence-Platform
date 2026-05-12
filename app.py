@@ -1,14 +1,22 @@
 import streamlit as st
-import pdfplumber
-import re
 import nltk
 import os
-import uuid
-import chromadb
-import ollama
 
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
+from utils import (
+    extract_text_from_pdf,
+    clean_text,
+    chunk_text,
+    extract_skills,
+    calculate_similarity
+)
+
+from database import (
+    store_resume,
+    store_jd,
+    search_resumes
+)
+
+from rag import generate_rag_response
 
 # -----------------------------
 # CONFIG
@@ -24,37 +32,20 @@ nltk.download('punkt', quiet=True)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # -----------------------------
-# VECTOR DATABASE
-# -----------------------------
-
-chroma_client = chromadb.Client()
-
-collection = chroma_client.get_or_create_collection(
-    name="resume_jobs"
-)
-
-
-# -----------------------------
-# EMBEDDING MODEL
-# -----------------------------
-
-embedding_model = SentenceTransformer(
-    'all-MiniLM-L6-v2'
-)
-
-# -----------------------------
 # SIDEBAR
 # -----------------------------
 
-st.sidebar.title("AI Recruitment Intelligence Platform")
+st.sidebar.title(
+    "AI Recruitment Intelligence Platform"
+)
 
 st.sidebar.info(
     """
 Semantic ATS analysis using:
 
-• Transformer embeddings  
-• ChromaDB vector retrieval  
-• Chunked RAG pipelines  
+• Transformer embeddings
+• ChromaDB vector retrieval
+• Chunked RAG pipelines
 • Local LLM orchestration
 """
 )
@@ -64,10 +55,12 @@ show_chunks = st.sidebar.checkbox(
 )
 
 # -----------------------------
-# MAIN TITLE
+# TITLE
 # -----------------------------
 
-st.title("AI Recruitment Intelligence Platform")
+st.title(
+    "AI Recruitment Intelligence Platform"
+)
 
 st.caption(
     "Powered by transformer embeddings, ChromaDB vector retrieval, and local LLM orchestration."
@@ -88,303 +81,7 @@ job_description = st.text_area(
 )
 
 # -----------------------------
-# SKILLS DATABASE
-# -----------------------------
-
-COMMON_SKILLS = [
-    "python",
-    "java",
-    "c++",
-    "sql",
-    "machine learning",
-    "deep learning",
-    "data analysis",
-    "streamlit",
-    "tensorflow",
-    "pandas",
-    "numpy",
-    "nlp",
-    "react",
-    "javascript",
-    "git",
-    "github",
-    "linux",
-    "power bi",
-    "tableau",
-    "selenium",
-    "xgboost",
-    "bash",
-    "flask",
-    "django",
-    "aws",
-    "docker",
-    "langchain",
-    "rag",
-    "llm",
-    "vector database",
-    "fastapi"
-]
-
-# -----------------------------
-# FUNCTIONS
-# -----------------------------
-
-def extract_text_from_pdf(pdf_file):
-
-    text = ""
-
-    with pdfplumber.open(pdf_file) as pdf:
-
-        for page in pdf.pages:
-
-            extracted = page.extract_text()
-
-            if extracted:
-                text += extracted + "\n"
-
-    return text
-
-
-def clean_text(text):
-
-    text = text.lower()
-
-    text = re.sub(
-        r'[^a-zA-Z0-9 ]',
-        ' ',
-        text
-    )
-
-    return text
-
-
-def chunk_text(
-    text,
-    chunk_size=400,
-    overlap=100
-):
-
-    chunks = []
-
-    start = 0
-
-    while start < len(text):
-
-        end = start + chunk_size
-
-        chunk = text[start:end]
-
-        chunks.append(chunk)
-
-        start += chunk_size - overlap
-
-    return chunks
-
-
-def extract_skills(text):
-
-    found_skills = []
-
-    for skill in COMMON_SKILLS:
-
-        if skill in text:
-            found_skills.append(skill)
-
-    return found_skills
-
-
-def store_documents(
-    resume,
-    jd,
-    candidate
-):
-
-    existing = collection.get(
-        where={"candidate": candidate}
-    )
-
-    if existing["ids"]:
-        return
-
-    resume_chunks = chunk_text(resume)
-
-    jd_chunks = chunk_text(jd)
-
-    all_chunks = []
-
-    metadatas = []
-
-    ids = []
-
-    for idx, chunk in enumerate(resume_chunks):
-
-        all_chunks.append(chunk)
-
-        metadatas.append({
-            "type": "resume",
-            "chunk": idx,
-            "candidate": candidate
-        })
-
-        ids.append(str(uuid.uuid4()))
-
-    for idx, chunk in enumerate(jd_chunks):
-
-        all_chunks.append(chunk)
-
-        metadatas.append({
-            "type": "job_description",
-            "chunk": idx,
-            "candidate": candidate
-        })
-
-        ids.append(str(uuid.uuid4()))
-
-    embeddings = embedding_model.encode(
-        all_chunks
-    ).tolist()
-
-    collection.upsert(
-        documents=all_chunks,
-        embeddings=embeddings,
-        metadatas=metadatas,
-        ids=ids
-    )
-
-
-def retrieve_similar_documents(query):
-
-    query_embedding = embedding_model.encode(
-        [query]
-    ).tolist()
-
-    results = collection.query(
-        query_embeddings=query_embedding,
-        n_results=3
-    )
-
-    return results
-
-
-def search_candidates(query):
-
-    query_embedding = embedding_model.encode(
-        [query]
-    ).tolist()
-
-    results = collection.query(
-        query_embeddings=query_embedding,
-        n_results=10
-    )
-
-    return results
-
-
-def calculate_similarity(resume, jd):
-
-    resume_embedding = embedding_model.encode(
-        [resume]
-    )
-
-    jd_embedding = embedding_model.encode(
-        [jd]
-    )
-
-    semantic_similarity = cosine_similarity(
-        resume_embedding,
-        jd_embedding
-    )[0][0]
-
-    semantic_score = semantic_similarity * 100
-
-    resume_skills = extract_skills(resume)
-
-    jd_skills = extract_skills(jd)
-
-    matched = len(
-        set(resume_skills).intersection(
-            set(jd_skills)
-        )
-    )
-
-    total = max(len(jd_skills), 1)
-
-    skill_score = (matched / total) * 100
-
-    final_score = (
-        0.7 * semantic_score
-    ) + (
-        0.3 * skill_score
-    )
-
-    return round(final_score, 2)
-
-
-def generate_rag_response(query):
-
-    retrieval_results = retrieve_similar_documents(
-        query
-    )
-
-    retrieved_docs = retrieval_results["documents"][0]
-
-    context = "\n\n".join(retrieved_docs)
-
-    prompt = f"""
-You are an expert ATS evaluator and AI recruiter.
-
-Use ONLY the retrieved context below
-to answer the question.
-
-Retrieved Context:
-{context}
-
-Question:
-{query}
-
-Evaluate the candidate professionally.
-
-Provide:
-1. ATS compatibility assessment
-2. Important missing technical skills
-3. Resume improvement recommendations
-4. Project recommendations for this role
-5. Likely interview focus areas
-
-Base your response ONLY on retrieved context.
-"""
-
-    try:
-
-        response = ollama.chat(
-            model='gemma:2b',
-            messages=[
-                {
-                    'role': 'user',
-                    'content': prompt
-                }
-            ]
-        )
-
-        return response['message']['content']
-
-    except Exception as e:
-
-        return f"""
-Local LLM unavailable.
-
-Possible reasons:
-- Ollama not installed
-- gemma:2b model not downloaded
-- Ollama server not running
-
-Error:
-{str(e)}
-"""
-
-
-# -----------------------------
-# MAIN ANALYSIS
+# MAIN APP
 # -----------------------------
 
 if uploaded_file and job_description and candidate_name:
@@ -401,9 +98,21 @@ if uploaded_file and job_description and candidate_name:
         job_description
     )
 
-    store_documents(
-        cleaned_resume,
-        cleaned_jd,
+    resume_chunks = chunk_text(
+        cleaned_resume
+    )
+
+    jd_chunks = chunk_text(
+        cleaned_jd
+    )
+
+    store_resume(
+        resume_chunks,
+        candidate_name
+    )
+
+    store_jd(
+        jd_chunks,
         candidate_name
     )
 
@@ -445,12 +154,8 @@ if uploaded_file and job_description and candidate_name:
             "Low Match"
         )
 
-    st.caption(
-        "Score generated using semantic embeddings and skill matching."
-    )
-
     # -----------------------------
-    # SKILL ANALYSIS
+    # SKILLS
     # -----------------------------
 
     resume_skills = extract_skills(
@@ -473,88 +178,28 @@ if uploaded_file and job_description and candidate_name:
 
     col1, col2 = st.columns(2)
 
-    # -----------------------------
-    # MATCHED SKILLS
-    # -----------------------------
-
     with col1:
 
-        st.subheader("Matched Skills")
+        st.subheader(
+            "Matched Skills"
+        )
 
-        if matched_skills:
+        for skill in matched_skills:
 
-            for skill in matched_skills:
-
-                st.markdown(
-                    f"""
-<div style="
-padding:10px;
-border-radius:10px;
-background-color:#1e5631;
-margin-bottom:10px;
-color:white;
-font-weight:bold;
-">
-✅ {skill}
-</div>
-""",
-                    unsafe_allow_html=True
-                )
-
-        else:
-
-            st.write(
-                "No matching skills found"
-            )
-
-    # -----------------------------
-    # MISSING SKILLS
-    # -----------------------------
+            st.success(skill)
 
     with col2:
 
-        st.subheader("Missing Skills")
+        st.subheader(
+            "Missing Skills"
+        )
 
-        if missing_skills:
+        for skill in missing_skills:
 
-            for skill in missing_skills:
-
-                st.markdown(
-                    f"""
-<div style="
-padding:10px;
-border-radius:10px;
-background-color:#7a1c1c;
-margin-bottom:10px;
-color:white;
-font-weight:bold;
-">
-❌ {skill}
-</div>
-""",
-                    unsafe_allow_html=True
-                )
-
-        else:
-
-            st.write(
-                "No major skills missing"
-            )
+            st.error(skill)
 
     # -----------------------------
-    # RESUME PREVIEW
-    # -----------------------------
-
-    st.subheader("Resume Preview")
-
-    st.text_area(
-        "",
-        resume_text,
-        height=300
-    )
-
-    # -----------------------------
-    # RAG RESPONSE
+    # RAG ANALYSIS
     # -----------------------------
 
     st.subheader(
@@ -572,16 +217,16 @@ font-weight:bold;
     st.write(feedback)
 
     # -----------------------------
-    # RETRIEVAL RESULTS
+    # RETRIEVAL DEBUG
     # -----------------------------
 
     if show_chunks:
 
         st.subheader(
-            "Semantic Retrieval Results"
+            "Retrieved Resume Chunks"
         )
 
-        retrieval_results = retrieve_similar_documents(
+        retrieval_results = search_resumes(
             cleaned_resume
         )
 
@@ -589,25 +234,15 @@ font-weight:bold;
 
         for idx, doc in enumerate(retrieved_docs):
 
-            metadata = retrieval_results["metadatas"][0][idx]
-
-            st.markdown(
-                f"""
-### Retrieved Chunk {idx+1}
-
-Type: {metadata['type']}
-
-Chunk Index: {metadata['chunk']}
-"""
-            )
-
             st.info(doc[:500])
 
     # -----------------------------
     # RECRUITER SEARCH
     # -----------------------------
 
-    st.subheader("Recruiter Semantic Search")
+    st.subheader(
+        "Recruiter Semantic Search"
+    )
 
     recruiter_query = st.text_input(
         "Search Candidates by Skills or Role"
@@ -615,7 +250,7 @@ Chunk Index: {metadata['chunk']}
 
     if recruiter_query:
 
-        search_results = search_candidates(
+        search_results = search_resumes(
             recruiter_query
         )
 
@@ -623,21 +258,20 @@ Chunk Index: {metadata['chunk']}
 
         metadatas = search_results["metadatas"][0]
 
-        displayed_candidates = set()
+        shown_candidates = set()
 
         for idx, doc in enumerate(retrieved_docs):
 
-            candidate = metadatas[idx].get(
-                "candidate",
-                "Unknown"
-            )
+            candidate = metadatas[idx]["candidate"]
 
-            if candidate not in displayed_candidates:
+            if candidate not in shown_candidates:
 
-                displayed_candidates.add(candidate)
+                shown_candidates.add(candidate)
 
                 st.success(
                     f"Matched Candidate: {candidate}"
                 )
 
-                st.info(doc[:300])
+                st.caption(
+                    "Semantic profile match found using embedding similarity."
+                )
